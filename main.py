@@ -1,5 +1,4 @@
 import streamlit as st
-from pyzbar.pyzbar import decode
 import pandas as pd
 from datetime import date
 from dateutil.relativedelta import relativedelta
@@ -84,19 +83,39 @@ class HulkGymQRSystem:
         st.header("🔍 Member Check-In")
         welcome_placeholder = st.empty()
         
-        # استخدام st.camera_input بدلاً من cv2.VideoCapture
         img_file = st.camera_input("Scan QR Code", key="qr_scanner")
         
         if img_file is not None:
             try:
-                img = Image.open(img_file)
-                frame = np.array(img)
-                qr_codes = decode(frame)
+                # Try using pyzbar first
+                try:
+                    from pyzbar.pyzbar import decode
+                    img = Image.open(img_file)
+                    qr_codes = decode(img)
+                    if qr_codes:
+                        for qr in qr_codes:
+                            qr_data = qr.data.decode('utf-8').strip()
+                            self.process_qr_code(qr_data, welcome_placeholder)
+                            return
+                except ImportError:
+                    pass
                 
-                if qr_codes:
-                    for qr in qr_codes:
-                        qr_data = qr.data.decode('utf-8').strip()
-                        self.process_qr_code(qr_data, welcome_placeholder)
+                # Fallback to OpenCV if pyzbar fails
+                try:
+                    import cv2
+                    img = Image.open(img_file)
+                    frame = np.array(img)
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                    detector = cv2.QRCodeDetector()
+                    data, vertices, _ = detector.detectAndDecode(frame)
+                    if data:
+                        self.process_qr_code(data, welcome_placeholder)
+                        return
+                except ImportError:
+                    st.warning("Please install either pyzbar (with zbar system library) or opencv-python")
+                
+                st.warning("Could not read QR code. Please try again.")
+                
             except Exception as e:
                 st.error(f"Error scanning QR: {e}")
     
